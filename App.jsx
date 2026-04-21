@@ -172,8 +172,12 @@ export default function App() {
   async function addInstance(name) {
     if (!config.url || !config.token) return showToast("⚠️ Configure a API primeiro");
     if (instances.length >= 5) return showToast("⚠️ Máximo de 5 instâncias");
-    if (instances.find(i => i.id === name)) return showToast("⚠️ Já existe na lista");
-    try { try { await fetch(`${config.url}/instance/create`, { method: "POST", headers: { "Content-Type": "application/json", apikey: config.token }, body: JSON.stringify({ instanceName: name, integration: "WHATSAPP-BAILEYS" }) }); } catch {} setInstances(prev => [...prev, { id: name, label: name, status: "disconnected" }]); setQrModal(name); } catch { showToast("❌ Erro ao criar instância"); }
+    if (instances.find(i => i.id === name)) { setQrModal(name); return; }
+    try {
+      await fetch(`${config.url}/instance/create`, { method: "POST", headers: { "Content-Type": "application/json", apikey: config.token }, body: JSON.stringify({ instanceName: name, integration: "WHATSAPP-BAILEYS" }) });
+    } catch {}
+    setInstances(prev => [...prev, { id: name, label: name, status: "disconnected" }]);
+    setQrModal(name);
   }
 
   async function refreshStatus() {
