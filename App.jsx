@@ -247,17 +247,13 @@ export default function App() {
   async function createInstance(name) {
     if (!config.url || !config.token) return showToast("⚠️ Configure a API primeiro");
     if (instances.length >= 5) return showToast("⚠️ Máximo de 5 WhatsApps atingido");
+    if (instances.find(i => i.id === name)) return showToast("⚠️ Instância já existe na lista");
     try {
-      const res = await fetch(`${config.url}/instance/fetchInstances`, { headers:{ apikey:config.token } });
-      const data = await res.json();
-      const exists = Array.isArray(data) && data.find(i => i.instance?.instanceName === name);
-      if (!exists) {
+      // Try to create, ignore error if already exists
+      try {
         await fetch(`${config.url}/instance/create`, { method:"POST", headers:{"Content-Type":"application/json", apikey:config.token}, body: JSON.stringify({ instanceName:name, integration:"WHATSAPP-BAILEYS" }) });
-      }
-      const alreadyInList = instances.find(i => i.id === name);
-      if (!alreadyInList) {
-        setInstances(prev => [...prev, { id:name, label:name, status:"disconnected" }]);
-      }
+      } catch {}
+      setInstances(prev => [...prev, { id:name, label:name, status:"disconnected" }]);
       setQrModal(name);
     } catch { showToast("❌ Erro ao criar instância"); }
   }
@@ -265,26 +261,16 @@ export default function App() {
   async function refreshInstances() {
     if (!config.url || !config.token) return showToast("⚠️ Configure a API primeiro");
     try {
-      const res = await fetch(`${config.url}/instance/fetchInstances`, { headers:{ apikey:config.token } });
+      const res = await fetch(`${config.url}/instance/connectionState/${instances[0]?.id || "WA-1"}`, { headers:{ apikey:config.token } });
       const data = await res.json();
-      if (Array.isArray(data)) {
-        const serverInstances = data.map(d => ({
-          id: d.instance?.instanceName,
-          label: d.instance?.instanceName,
-          status: d.instance?.state === "open" ? "connected" : "disconnected"
-        })).filter(i => i.id);
-        setInstances(prev => {
-          const merged = [...prev];
-          serverInstances.forEach(si => {
-            const idx = merged.findIndex(i => i.id === si.id);
-            if (idx >= 0) merged[idx] = { ...merged[idx], status: si.status };
-            else merged.push(si);
-          });
-          return merged.slice(0, 5);
-        });
-        showToast("✅ Status atualizado!");
+      const state = data?.instance?.state || data?.state;
+      if (state) {
+        setInstances(prev => prev.map(inst => ({ ...inst, status: state === "open" ? "connected" : "disconnected" })));
+        showToast(state === "open" ? "✅ Conectado!" : "⚠️ Desconectado");
+      } else {
+        showToast("⚠️ Verifique a conexão");
       }
-    } catch { showToast("❌ Erro ao buscar instâncias"); }
+    } catch { showToast("❌ Erro ao verificar status"); }
   }
 
   const prod = PRODUCTS.find(p=>p.id===form.product);
