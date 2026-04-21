@@ -185,9 +185,24 @@ export default function App() {
     try {
       const res = await fetch(`${config.url}/instance/fetchInstances`, { headers: { apikey: config.token } });
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setInstances(prev => { const m = [...prev]; data.forEach(d => { const name = d.instance?.instanceName; const state = d.instance?.state === "open" ? "connected" : "disconnected"; const idx = m.findIndex(i => i.id === name); if (idx >= 0) m[idx] = { ...m[idx], status: state }; else if (name && m.length < 5) m.push({ id: name, label: name, status: state }); }); return m; });
+      const list = Array.isArray(data) ? data : [];
+      if (list.length > 0) {
+        setInstances(prev => {
+          const m = [...prev];
+          list.forEach(d => {
+            const name = d.instance?.instanceName || d.instanceName;
+            const rawState = d.instance?.state || d.state || d.connectionStatus || "";
+            const state = (rawState === "open" || rawState === "connected") ? "connected" : "disconnected";
+            if (!name) return;
+            const idx = m.findIndex(i => i.id === name);
+            if (idx >= 0) m[idx] = { ...m[idx], status: state };
+            else if (m.length < 5) m.push({ id: name, label: name, status: state });
+          });
+          return m;
+        });
         showToast("✓ Status sincronizado");
+      } else {
+        showToast("⚠️ Nenhuma instância encontrada");
       }
     } catch { showToast("❌ Erro ao sincronizar"); }
   }
