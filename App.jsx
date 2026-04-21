@@ -70,17 +70,76 @@ function TogBtn({ active, onClick, color, children }) {
   return <button onClick={onClick} style={{ flex: 1, padding: "8px", background: active ? `${color}12` : "rgba(255,255,255,0.02)", border: `1px solid ${active ? color + "40" : "rgba(255,255,255,0.06)"}`, color: active ? color : "rgba(255,255,255,0.25)", borderRadius: 10, cursor: "pointer", fontSize: 11, fontFamily: "monospace", fontWeight: 700, transition: "all .2s" }}>{children}</button>;
 }
 
+// ✅ QRModal corrigido: tenta connect direto, se falhar tenta criar primeiro
 function QRModal({ instanceId, apiUrl, apiKey, onClose, onConnected }) {
   const [qr, setQr] = useState(null);
   const [status, setStatus] = useState("loading");
   const pollRef = useRef();
-  useEffect(() => { fetchQR(); pollRef.current = setInterval(checkStatus, 4000); return () => clearInterval(pollRef.current); }, []);
-  async function fetchQR() {
-    try { const res = await fetch(`${apiUrl}/instance/connect/${instanceId}`, { headers: { apikey: apiKey } }); const data = await res.json(); if (data.base64) { setQr(data.base64); setStatus("qr"); } else setStatus("error"); } catch { setStatus("error"); }
+
+  useEffect(() => {
+    initInstance();
+    pollRef.current = setInterval(checkStatus, 4000);
+    return () => clearInterval(pollRef.current);
+  }, []);
+
+  async function initInstance() {
+    try {
+      // 1. Tenta conectar direto (caso instância já exista)
+      const res = await fetch(`${apiUrl}/instance/connect/${instanceId}`, {
+        headers: { apikey: apiKey }
+      });
+      const data = await res.json();
+      if (data.base64) {
+        setQr(data.base64);
+        setStatus("qr");
+        return;
+      }
+      // 2. Se não retornou QR, tenta criar a instância
+      await createAndConnect();
+    } catch {
+      await createAndConnect();
+    }
   }
+
+  async function createAndConnect() {
+    try {
+      await fetch(`${apiUrl}/instance/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: apiKey },
+        body: JSON.stringify({ instanceName: instanceId, integration: "WHATSAPP-BAILEYS" })
+      });
+      // Aguarda um pouco e tenta conectar
+      await new Promise(r => setTimeout(r, 1500));
+      const res2 = await fetch(`${apiUrl}/instance/connect/${instanceId}`, {
+        headers: { apikey: apiKey }
+      });
+      const data2 = await res2.json();
+      if (data2.base64) {
+        setQr(data2.base64);
+        setStatus("qr");
+      } else {
+        setStatus("error");
+      }
+    } catch {
+      setStatus("error");
+    }
+  }
+
   async function checkStatus() {
-    try { const res = await fetch(`${apiUrl}/instance/fetchInstances`, { headers: { apikey: apiKey } }); const data = await res.json(); const inst = Array.isArray(data) ? data.find(i => i.instance?.instanceName === instanceId) : null; if (inst?.instance?.state === "open") { clearInterval(pollRef.current); setStatus("connected"); setTimeout(() => { onConnected(); onClose(); }, 1500); } } catch {}
+    try {
+      const res = await fetch(`${apiUrl}/instance/fetchInstances`, { headers: { apikey: apiKey } });
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      const inst = list.find(i => i.instance?.instanceName === instanceId || i.instanceName === instanceId);
+      const state = inst?.instance?.state || inst?.state || inst?.connectionStatus || "";
+      if (state === "open" || state === "connected") {
+        clearInterval(pollRef.current);
+        setStatus("connected");
+        setTimeout(() => { onConnected(); onClose(); }, 1500);
+      }
+    } catch {}
   }
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", backdropFilter: "blur(12px)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#ffffff", border: "1px solid #e4e6eb", borderRadius: 24, padding: 32, maxWidth: 360, width: "90%", textAlign: "center" }}>
@@ -90,7 +149,7 @@ function QRModal({ instanceId, apiUrl, apiKey, onClose, onConnected }) {
         {status === "loading" && <div style={{ color: "#65676b", fontFamily: "monospace", fontSize: 12, padding: 40 }}>Carregando QR Code...</div>}
         {status === "qr" && qr && <><div style={{ background: "#fff", borderRadius: 14, padding: 10, display: "inline-block", marginBottom: 14 }}><img src={qr} alt="QR" style={{ width: 200, height: 200, display: "block" }} /></div><div style={{ fontSize: 11, color: "#65676b", fontFamily: "monospace" }}>WhatsApp → Aparelhos conectados</div></>}
         {status === "connected" && <div style={{ color: "#00d97e", fontSize: 40, padding: 24 }}>✓</div>}
-        {status === "error" && <><div style={{ color: "#ff4d4d", fontSize: 12, fontFamily: "monospace", marginBottom: 12 }}>Erro ao carregar QR Code</div><button onClick={fetchQR} style={{ background: "rgba(74,158,255,0.12)", border: "1px solid rgba(74,158,255,0.2)", color: "#4a9eff", borderRadius: 10, padding: "9px 20px", cursor: "pointer", fontFamily: "monospace", fontSize: 12, marginBottom: 8 }}>Tentar novamente</button></>}
+        {status === "error" && <><div style={{ color: "#ff4d4d", fontSize: 12, fontFamily: "monospace", marginBottom: 12 }}>Erro ao carregar QR Code</div><button onClick={initInstance} style={{ background: "rgba(74,158,255,0.12)", border: "1px solid rgba(74,158,255,0.2)", color: "#4a9eff", borderRadius: 10, padding: "9px 20px", cursor: "pointer", fontFamily: "monospace", fontSize: 12, marginBottom: 8 }}>Tentar novamente</button></>}
         <button onClick={onClose} style={{ display: "block", width: "100%", marginTop: 12, background: "#f0f2f5", border: "1px solid #e4e6eb", color: "#65676b", borderRadius: 10, padding: "10px", cursor: "pointer", fontFamily: "monospace", fontSize: 12 }}>Fechar</button>
       </div>
     </div>
@@ -169,17 +228,17 @@ export default function App() {
     setDispatches(prev => prev.filter(d => d.projectId !== pid));
   }
 
+  // ✅ addInstance corrigido: não tenta criar, vai direto pro QR
   async function addInstance(name) {
     if (!config.url || !config.token) return showToast("⚠️ Configure a API primeiro");
     if (instances.length >= 5) return showToast("⚠️ Máximo de 5 instâncias");
-    if (instances.find(i => i.id === name)) { setQrModal(name); return; }
-    try {
-      await fetch(`${config.url}/instance/create`, { method: "POST", headers: { "Content-Type": "application/json", apikey: config.token }, body: JSON.stringify({ instanceName: name, integration: "WHATSAPP-BAILEYS" }) });
-    } catch {}
-    setInstances(prev => [...prev, { id: name, label: name, status: "disconnected" }]);
+    if (!instances.find(i => i.id === name)) {
+      setInstances(prev => [...prev, { id: name, label: name, status: "disconnected" }]);
+    }
     setQrModal(name);
   }
 
+  // ✅ refreshStatus corrigido: aceita qualquer nome de instância da API
   async function refreshStatus() {
     if (!config.url || !config.token) return showToast("⚠️ Configure a API primeiro");
     try {
@@ -195,8 +254,13 @@ export default function App() {
             const state = (rawState === "open" || rawState === "connected") ? "connected" : "disconnected";
             if (!name) return;
             const idx = m.findIndex(i => i.id === name);
-            if (idx >= 0) m[idx] = { ...m[idx], status: state };
-            else if (m.length < 5) m.push({ id: name, label: name, status: state });
+            if (idx >= 0) {
+              m[idx] = { ...m[idx], status: state };
+            }
+            // ✅ Se instância existe na API mas não no app local, adiciona automaticamente
+            else if (m.length < 5) {
+              m.push({ id: name, label: name, status: state });
+            }
           });
           return m;
         });
@@ -408,7 +472,7 @@ export default function App() {
         </div>
       </div>
 
-      {qrModal && <QRModal instanceId={qrModal} apiUrl={config.url} apiKey={config.token} onClose={() => setQrModal(null)} onConnected={() => setInstances(prev => prev.map(i => i.id === qrModal ? { ...i, status: "connected" } : i))} />}
+      {qrModal && <QRModal instanceId={qrModal} apiUrl={config.url} apiKey={config.token} onClose={() => setQrModal(null)} onConnected={() => { setInstances(prev => prev.map(i => i.id === qrModal ? { ...i, status: "connected" } : i)); refreshStatus(); }} />}
       {toast && <Toast msg={toast} onClose={() => setToast(null)} />}
     </>
   );
