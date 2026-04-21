@@ -158,20 +158,31 @@ function QRModal({ instanceId, apiUrl, apiKey, onClose, onConnected }) {
 
 export default function App() {
   const [tab, setTab] = useState("projects");
-  const [config, setConfig] = useState(() => { try { return JSON.parse(localStorage.getItem("wa_cfg3") || "{}"); } catch { return {}; } });
-  const [instances, setInstances] = useState(() => { try { return JSON.parse(localStorage.getItem("wa_inst3") || "[]"); } catch { return []; } });
-  const [projects, setProjects] = useState(() => { try { return JSON.parse(localStorage.getItem("wa_proj3") || "[]"); } catch { return []; } });
-  const [dispatches, setDispatches] = useState(() => { try { return JSON.parse(localStorage.getItem("wa_disp3") || "[]"); } catch { return []; } });
+  const [config, setConfig] = useState({});
+  const [instances, setInstances] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [dispatches, setDispatches] = useState([]);
   const [toast, setToast] = useState(null);
   const [qrModal, setQrModal] = useState(null);
   const timers = useRef({});
   const eSlot = () => ({ id: Date.now() + Math.random(), date: "", time: "", hasImage: false, hasMessage: false, imageB64: null, imageName: "", imageType: "", message: "" });
   const [form, setForm] = useState({ product: "bombeiro", phones: "", sender: "", slots: [eSlot()] });
 
-  useEffect(() => { localStorage.setItem("wa_cfg3", JSON.stringify(config)); }, [config]);
-  useEffect(() => { localStorage.setItem("wa_inst3", JSON.stringify(instances)); }, [instances]);
-  useEffect(() => { localStorage.setItem("wa_proj3", JSON.stringify(projects)); }, [projects]);
-  useEffect(() => { localStorage.setItem("wa_disp3", JSON.stringify(dispatches)); }, [dispatches]);
+  // Carregar dados do servidor ao iniciar
+  useEffect(() => {
+    fetch('/api/state').then(r => r.json()).then(data => {
+      if (data.config && Object.keys(data.config).length) setConfig(data.config);
+      if (data.instances?.length) setInstances(data.instances);
+      if (data.projects?.length) setProjects(data.projects);
+      if (data.dispatches?.length) setDispatches(data.dispatches);
+    }).catch(() => {});
+  }, []);
+
+  // Salvar no servidor quando mudar
+  useEffect(() => { if (Object.keys(config).length) fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) }).catch(() => {}); }, [config]);
+  useEffect(() => { fetch('/api/instances', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(instances) }).catch(() => {}); }, [instances]);
+  useEffect(() => { fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(projects) }).catch(() => {}); }, [projects]);
+  useEffect(() => { fetch('/api/dispatches', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dispatches) }).catch(() => {}); }, [dispatches]);
 
   useEffect(() => {
     dispatches.forEach(d => {
