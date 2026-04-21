@@ -127,7 +127,7 @@ function QRModal({ instanceId, apiUrl, apiKey, onClose, onConnected }) {
 
   async function checkStatus() {
     try {
-      const res = await fetch(`${apiUrl}/instance/fetchInstances`, { headers: { apikey: apiKey } });
+      const res = await fetch(`${apiUrl}/instance/fetchInstances`, { headers: { apikey: apiKey }, cache: "no-store" });
       const data = await res.json();
       const list = Array.isArray(data) ? data : [];
       const inst = list.find(i => i.instance?.instanceName === instanceId || i.instanceName === instanceId);
@@ -242,7 +242,7 @@ export default function App() {
   async function refreshStatus() {
     if (!config.url || !config.token) return showToast("⚠️ Configure a API primeiro");
     try {
-      const res = await fetch(`${config.url}/instance/fetchInstances`, { headers: { apikey: config.token } });
+      const res = await fetch(`${config.url}/instance/fetchInstances`, { headers: { apikey: config.token }, cache: "no-store" });
       const data = await res.json();
       const list = Array.isArray(data) ? data : [];
       if (list.length > 0) {
