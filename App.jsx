@@ -130,7 +130,7 @@ function QRModal({ instanceId, apiUrl, apiKey, onClose, onConnected }) {
       const res = await fetch(`${apiUrl}/instance/fetchInstances`, { headers: { apikey: apiKey }, cache: "no-store" });
       const data = await res.json();
       const list = Array.isArray(data) ? data : [];
-      const inst = list.find(i => i.instance?.instanceName === instanceId || i.instanceName === instanceId);
+      const inst = list.find(i => i.instance?.instanceName === instanceId || i.instanceName === instanceId || i.name === instanceId);
       const state = inst?.instance?.state || inst?.state || inst?.connectionStatus || "";
       if (state === "open" || state === "connected") {
         clearInterval(pollRef.current);
@@ -249,7 +249,7 @@ export default function App() {
         setInstances(prev => {
           const m = [...prev];
           list.forEach(d => {
-            const name = d.instance?.instanceName || d.instanceName;
+            const name = d.instance?.instanceName || d.instanceName || d.name;
             const rawState = d.instance?.state || d.state || d.connectionStatus || "";
             const state = (rawState === "open" || rawState === "connected") ? "connected" : "disconnected";
             if (!name) return;
